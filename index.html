@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Calculadora IA (OpenAI + n8n + Sheets)</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="./style.css"/>
+</head>
+<body>
+  <nav class="navbar navbar-dark bg-dark">
+    <div class="container">
+      <span class="navbar-brand">Calculadora IA</span>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h1 class="h4 mb-3">Ingresa una operación en texto</h1>
+            <p class="text-muted">Ejemplos: <code>12 + 7</code>, <code>¿cuánto es 8 por 6?</code>, <code>raíz de 81</code>, <code>45 / 5</code></p>
+
+            <div class="mb-3">
+              <label for="expr" class="form-label">Texto</label>
+              <input id="expr" class="form-control" placeholder="Escribe aquí...">
+            </div>
+
+            <div class="d-flex gap-2">
+              <button id="btnCalc" class="btn btn-primary">Calcular</button>
+              <button id="btnClear" class="btn btn-outline-secondary">Limpiar</button>
+            </div>
+
+            <hr class="my-4"/>
+
+            <div id="status" class="small text-muted"></div>
+
+            <div id="result" class="mt-3 d-none">
+              <h2 class="h5">Resultado</h2>
+              <ul class="list-group">
+                <li class="list-group-item"><strong>IP Pública:</strong> <span id="ipOut"></span></li>
+                <li class="list-group-item"><strong>Operando A:</strong> <span id="aOut"></span></li>
+                <li class="list-group-item"><strong>Operando B:</strong> <span id="bOut"></span></li>
+                <li class="list-group-item"><strong>Operación:</strong> <span id="opOut"></span></li>
+                <li class="list-group-item"><strong>Resultado:</strong> <span id="resOut"></span></li>
+              </ul>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="alert alert-info mt-3">
+          Los datos se guardan automáticamente en Google Sheets desde n8n.
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ====== CONFIGURA AQUÍ TU WEBHOOK DE N8N ======
+    const N8N_WEBHOOK_URL = "https://cesargarcia12.app.n8n.cloud/workflow/1EpGa62R9hJlCYnP"; // <--- REEMPLAZA
+
+    async function getPublicIP() {
+      const r = await fetch("https://api.ipify.org?format=json");
+      if (!r.ok) throw new Error("No se pudo obtener IP");
+      const { ip } = await r.json();
+      return ip;
+    }
+
+    async function calc() {
+      const status = document.getElementById("status");
+      const expr = document.getElementById("expr").value.trim();
+      const resBox = document.getElementById("result");
+
+      resBox.classList.add("d-none");
+      status.textContent = "Obteniendo IP pública…";
+
+      try {
+        const clientIp = await getPublicIP();
+
+        status.textContent = "Enviando a n8n…";
+        const r = await fetch(N8N_WEBHOOK_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text: expr, clientIp }),
+        });
+
+        if (!r.ok) {
+          const t = await r.text();
+          throw new Error(`n8n respondió ${r.status}: ${t}`);
+        }
+
+        const data = await r.json();
+        // data esperado: { ip, a, b, operation, result }
+        document.getElementById("ipOut").textContent = data.ip ?? clientIp ?? "-";
+        document.getElementById("aOut").textContent = (data.a ?? "").toString();
+        document.getElementById("bOut").textContent = (data.b ?? "").toString();
+        document.getElementById("opOut").textContent = data.operation ?? "-";
+        document.getElementById("resOut").textContent = (data.result ?? "").toString();
+
+        resBox.classList.remove("d-none");
+        status.textContent = "Listo ✓";
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Error: " + err.message;
+      }
+    }
+
+    document.getElementById("btnCalc").addEventListener("click", calc);
+    document.getElementById("btnClear").addEventListener("click", () => {
+      document.getElementById("expr").value = "";
+      document.getElementById("status").textContent = "";
+      document.getElementById("result").classList.add("d-none");
+    });
+  </script>
+</body>
+</html>
